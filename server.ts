@@ -7,16 +7,15 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  // Increase payload limit for base64 images
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// Increase payload limit for base64 images
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // API endpoint for generating real estate copywriting
-  app.post("/api/generate", async (req, res) => {
+// API endpoint for generating real estate copywriting
+app.post("/api/generate", async (req, res) => {
     try {
       const {
         propertyType,
@@ -326,16 +325,20 @@ Siempre asume que la moneda boliviana (BOB) y dólares americanos (USD) son el e
       const videoProps = req.body;
       console.log("Iniciando generación de video en el backend...");
 
-      // Ensure renders directory exists
-      const rendersDir = path.join(process.cwd(), "dist", "video-renders");
-      if (!fs.existsSync(rendersDir)) {
-        fs.mkdirSync(rendersDir, { recursive: true });
-      }
-
       const fileId = `video_${Date.now()}`;
-      const outputPath = path.join(rendersDir, `${fileId}.mp4`);
-
+      
       try {
+        // Use /tmp for Vercel Serverless, otherwise use dist/video-renders
+        const rendersDir = process.env.VERCEL 
+          ? path.join("/tmp", "video-renders") 
+          : path.join(process.cwd(), "dist", "video-renders");
+          
+        if (!fs.existsSync(rendersDir)) {
+          fs.mkdirSync(rendersDir, { recursive: true });
+        }
+
+        const outputPath = path.join(rendersDir, `${fileId}.mp4`);
+
         console.log("Cargando módulos programmaticos de Remotion...");
         const { bundle } = await import("@remotion/bundler");
         const { renderMedia, selectComposition } = await import("@remotion/renderer");
@@ -394,7 +397,9 @@ Siempre asume que la moneda boliviana (BOB) y dólares americanos (USD) son el e
     try {
       const { filename } = req.params;
       const sanitized = path.basename(filename);
-      const filePath = path.join(process.cwd(), "dist", "video-renders", sanitized);
+      const filePath = process.env.VERCEL 
+        ? path.join("/tmp", "video-renders", sanitized)
+        : path.join(process.cwd(), "dist", "video-renders", sanitized);
 
       if (fs.existsSync(filePath)) {
         return res.download(filePath, `listapro_${sanitized}`);
@@ -407,6 +412,7 @@ Siempre asume que la moneda boliviana (BOB) y dólares americanos (USD) son el e
   });
 
   // Serve static assets and handle Vite development client
+async function startViteServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -426,4 +432,8 @@ Siempre asume que la moneda boliviana (BOB) y dólares americanos (USD) son el e
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startViteServer();
+}
+
+export default app;
